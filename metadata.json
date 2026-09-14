@@ -1,0 +1,6 @@
+{
+  "name": "Skybound & Travel Tracker",
+  "description": "Live overhead plane radar tracking paired with destination visa guidelines, color-coded travel requirements, and Google Drive document integration.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

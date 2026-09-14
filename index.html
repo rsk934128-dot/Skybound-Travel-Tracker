@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Skybound & Travel Tracker</title>
+    <meta name="description" content="Live overhead plane radar tracking paired with destination visa guidelines, color-coded travel requirements, and Google Drive document integration." />
+    
+    <!-- PWA & Mobile Web App Meta -->
+    <meta name="theme-color" content="#020617" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Skybound" />
+    <meta name="application-name" content="Skybound" />
+
+    <!-- Favicon & Icons -->
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="shortcut icon" href="/favicon.ico" />
+
+    <!-- Web App Manifest -->
+    <link rel="manifest" href="/manifest.json" />
+
+    <!-- Open Graph & Social Media Sharing Card -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Skybound & Travel Tracker" />
+    <meta property="og:title" content="Skybound & Travel Tracker 🇧🇩 - লাইভ ফ্লাইট রাডার ও ভিসা গাইড" />
+    <meta property="og:description" content="মাথার ওপর দিয়ে উড়ে যাওয়া বিমান লাইভ ট্র্যাক করুন এবং গন্তব্যের বাংলাদেশী পাসপোর্ট ভিসা নিয়ম ও ট্রাভেল রিকোয়ারমেন্টস জানুন।" />
+    <meta property="og:url" content="https://ais-pre-5v6mmcr2hcxp6l55u6th5s-622126518866.asia-east1.run.app" />
+    <meta property="og:image" content="https://ais-pre-5v6mmcr2hcxp6l55u6th5s-622126518866.asia-east1.run.app/images/og-share-banner.jpg" />
+    <meta property="og:image:secure_url" content="https://ais-pre-5v6mmcr2hcxp6l55u6th5s-622126518866.asia-east1.run.app/images/og-share-banner.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Skybound Live Flight Radar and Visa Intelligence for Bangladeshi Travelers" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Skybound & Travel Tracker 🇧🇩" />
+    <meta name="twitter:description" content="মাথার ওপর দিয়ে উড়ে যাওয়া বিমান লাইভ ট্র্যাক করুন এবং গন্তব্যের বাংলাদেশী পাসপোর্ট ভিসা নিয়ম জানুন।" />
+    <meta name="twitter:image" content="https://ais-pre-5v6mmcr2hcxp6l55u6th5s-622126518866.asia-east1.run.app/images/og-share-banner.jpg" />
+  </head>
+  <body class="bg-slate-950 text-slate-100 antialiased select-none">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+    <script>
+      if ('serviceWorker' in navigator && window.location.protocol.startsWith('http')) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').catch((err) => {
+            console.debug('ServiceWorker registration error:', err);
+          });
+        });
+      }
+    </script>
+  </body>
+</html>
+
