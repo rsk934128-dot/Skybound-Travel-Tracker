@@ -92,6 +92,59 @@ Safe travels from Skybound & Travel Tracker! Keep this document saved on your Go
 }
 
 /**
+ * Saves arbitrary text/markdown documents directly to Google Drive.
+ */
+export async function saveCustomDocumentToDrive(
+  accessToken: string,
+  fileName: string,
+  content: string,
+  description?: string
+): Promise<{ success: boolean; fileId?: string; fileUrl?: string; error?: string }> {
+  try {
+    const boundary = '-------314159265358979323846';
+    const delimiter = `\r\n--${boundary}\r\n`;
+    const closeDelimiter = `\r\n--${boundary}--`;
+
+    const metadata = {
+      name: fileName,
+      mimeType: 'text/plain',
+      description: description || `Document saved via SkyBound Bangladesh & Travel Tracker.`,
+    };
+
+    const multipartRequestBody =
+      delimiter +
+      'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
+      JSON.stringify(metadata) +
+      delimiter +
+      'Content-Type: text/plain; charset=UTF-8\r\n\r\n' +
+      content +
+      closeDelimiter;
+
+    const response = await fetch(
+      'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': `multipart/related; boundary=${boundary}`,
+        },
+        body: multipartRequestBody,
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      return { success: false, error: `Drive error: ${response.status} ${errorText}` };
+    }
+
+    const data = await response.json();
+    return { success: true, fileId: data.id, fileUrl: data.webViewLink };
+  } catch (err: any) {
+    return { success: false, error: err.message || String(err) };
+  }
+}
+
+/**
  * List files created with the app in Google Drive
  */
 export async function listAppFilesFromDrive(accessToken: string): Promise<any[]> {

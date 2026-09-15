@@ -5,6 +5,7 @@ import {
   Mail, Sparkles, Image as ImageIcon, Plane
 } from 'lucide-react';
 import { FlightState } from '../types';
+import { calculateFlightAnalytics, formatFlightTime } from '../flightAnalytics';
 
 interface ShareModalProps {
   isOpen: boolean;
@@ -43,9 +44,14 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   if (shareFlightContext && selectedFlight) {
     const flightName = selectedFlight.callsign || selectedFlight.airlineName || 'বিমান';
     const dest = selectedFlight.estimatedDestination?.city || 'আন্তর্জাতিক গন্তব্য';
-    const visaStatus = selectedFlight.destinationVisa?.categoryName || 'ভিসা তথ্য';
-    shareTitle = `🛫 Skybound-এ ট্র্যাক করছি: ${flightName} ➔ ${dest}`;
-    shareText = `আমি লাইভ রাডারে ${flightName} বিমানটি ট্র্যাক করছি! গন্তব্য: ${dest} (${visaStatus})। আপনার মাথার ওপর দিয়ে এখন কোন বিমান উড়ছে দেখতে ক্লিক করুন:`;
+    const analytics = calculateFlightAnalytics(selectedFlight);
+    const etaStr = formatFlightTime(
+      analytics.estimatedLandingTime,
+      analytics.destinationAirport.timezoneOffsetHours
+    );
+
+    shareTitle = `🛫 Skybound-এ ট্র্যাক করছি: ${flightName} ➔ ${dest} (ETA: ${etaStr})`;
+    shareText = `আমি লাইভ রাডারে ${flightName} বিমানটি ট্র্যাক করছি! গন্তব্য: ${dest}, আনুমানিক অবতরণ (ETA): ${etaStr} [${analytics.delayStatusLabelBn}]। আপনার মাথার ওপর দিয়ে এখন কোন বিমান উড়ছে দেখতে ক্লিক করুন:`;
   }
 
   const encodedUrl = encodeURIComponent(shareUrl);

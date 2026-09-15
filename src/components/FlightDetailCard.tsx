@@ -4,9 +4,10 @@ import { BANGLADESH_PASSPORT_VISA_DB, VISA_CATEGORIES_CONFIG } from '../visaData
 import { 
   Plane, ArrowRight, Gauge, Mountain, Compass, ShieldCheck, 
   FileText, CloudUpload, X, CheckCircle2, ChevronRight, ExternalLink,
-  Share2
+  Share2, Bell, BellOff, Coins, Building2
 } from 'lucide-react';
 import { saveVisaChecklistToDrive } from '../driveService';
+import { FlightAnalyticsPanel } from './FlightAnalyticsPanel';
 
 interface FlightDetailCardProps {
   flight: FlightState;
@@ -15,6 +16,12 @@ interface FlightDetailCardProps {
   driveToken: string | null;
   onNeedGoogleSignIn: () => void;
   onShare?: () => void;
+  isMonitored?: boolean;
+  isMuted?: boolean;
+  onToggleMonitor?: (icao24: string) => void;
+  onToggleMute?: (icao24: string) => void;
+  onOpenExpenseCalculator?: (countryCode: string) => void;
+  onOpenAirportGuide?: (iata: string) => void;
 }
 
 export const FlightDetailCard: React.FC<FlightDetailCardProps> = ({
@@ -24,6 +31,12 @@ export const FlightDetailCard: React.FC<FlightDetailCardProps> = ({
   driveToken,
   onNeedGoogleSignIn,
   onShare,
+  isMonitored = false,
+  isMuted = false,
+  onToggleMonitor,
+  onToggleMute,
+  onOpenExpenseCalculator,
+  onOpenAirportGuide,
 }) => {
   const [isSavingToDrive, setIsSavingToDrive] = useState(false);
   const [driveSavedUrl, setDriveSavedUrl] = useState<string | null>(null);
@@ -95,6 +108,21 @@ export const FlightDetailCard: React.FC<FlightDetailCardProps> = ({
         </div>
 
         <div className="flex items-center gap-1.5">
+          {onToggleMonitor && (
+            <button
+              id={`btn-toggle-flight-alert-${flight.icao24}`}
+              onClick={() => onToggleMonitor(flight.icao24)}
+              className={`p-1.5 rounded-full transition-colors cursor-pointer ${
+                isMonitored
+                  ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40 hover:bg-amber-500/30'
+                  : 'hover:bg-slate-800 text-slate-400 hover:text-white'
+              }`}
+              title={isMonitored ? 'এই বিমানের নোটিফিকেশন বন্ধ করুন' : 'এই বিমানের জন্য নোটিফিকেশন চালু করুন'}
+            >
+              <Bell className="w-4 h-4" />
+            </button>
+          )}
+
           {onShare && (
             <button
               onClick={onShare}
@@ -106,7 +134,7 @@ export const FlightDetailCard: React.FC<FlightDetailCardProps> = ({
           )}
           <button
             onClick={onClose}
-            className="p-1.5 rounded-full hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+            className="p-1.5 rounded-full hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -192,6 +220,72 @@ export const FlightDetailCard: React.FC<FlightDetailCardProps> = ({
         </div>
       </div>
 
+      {/* Flight Analytics & Predictive Arrival Delays Module */}
+      <div className="mb-3.5">
+        <FlightAnalyticsPanel flight={flight} />
+      </div>
+
+      {/* Individual Aircraft Notification Banner Control */}
+      {onToggleMonitor && (
+        <div className="mb-3.5 p-2.5 rounded-2xl bg-slate-950/70 border border-slate-800 text-xs flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 overflow-hidden">
+            <div className={`p-1.5 rounded-xl shrink-0 ${
+              isMonitored 
+                ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' 
+                : isMuted 
+                ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' 
+                : 'bg-slate-800 text-slate-400'
+            }`}>
+              {isMuted ? <BellOff className="w-4 h-4" /> : <Bell className="w-4 h-4" />}
+            </div>
+            <div className="truncate">
+              <span className="font-semibold text-slate-100 block truncate">
+                {isMonitored
+                  ? '🔔 এই বিমানের অ্যালার্ট সক্রিয় (Monitored)'
+                  : isMuted
+                  ? '🔕 এই বিমানটি মিউট করা রয়েছে'
+                  : 'এই বিমানের নোটিফিকেশন চান?'}
+              </span>
+              <span className="text-[11px] text-slate-400 block truncate">
+                {isMonitored
+                  ? 'রাডারে এলেই ব্রাউজার নোটিফিকেশন ও চাইম বাজবে'
+                  : isMuted
+                  ? 'অন্যান্য বিমান সচল থাকলেও এটি সতর্কতা পাঠাবে না'
+                  : 'ঘনঘন অ্যালার্ট এড়াতে নির্দিষ্ট বিমানে নজর রাখুন'}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              onClick={() => onToggleMonitor(flight.icao24)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+                isMonitored
+                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30 active:scale-95'
+                  : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/30 active:scale-95'
+              }`}
+            >
+              <Bell className="w-3.5 h-3.5" />
+              <span>{isMonitored ? 'অ্যালার্ট বন্ধ' : 'অ্যালার্ট অন'}</span>
+            </button>
+
+            {onToggleMute && (
+              <button
+                onClick={() => onToggleMute(flight.icao24)}
+                className={`p-1.5 rounded-xl border transition-colors cursor-pointer ${
+                  isMuted
+                    ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                    : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
+                }`}
+                title={isMuted ? 'আনমিউট করুন' : 'এই নির্দিষ্ট বিমান মিউট করুন'}
+              >
+                <BellOff className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Destination Visa Status Banner (COLOR CODED) */}
       <div className="p-3.5 rounded-2xl border bg-slate-950/60 border-slate-800 space-y-2">
         <div className="flex items-center justify-between">
@@ -226,9 +320,40 @@ export const FlightDetailCard: React.FC<FlightDetailCardProps> = ({
             className="w-full sm:flex-1 py-2 px-3 bg-slate-800 hover:bg-slate-750 text-xs text-slate-200 rounded-xl border border-slate-700 flex items-center justify-center gap-1.5 transition-colors"
           >
             <FileText className="w-3.5 h-3.5 text-indigo-400" />
-            <span>সম্পূর্ণ ভিসা গাইড ও রিকোয়ারমেন্টস</span>
+            <span>ভিসা গাইড</span>
             <ChevronRight className="w-3.5 h-3.5" />
           </button>
+
+          {onOpenExpenseCalculator && (
+            <button
+              onClick={() => onOpenExpenseCalculator(destCode)}
+              className="w-full sm:w-auto py-2 px-2.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 rounded-xl border border-amber-500/30 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+              title="এই দেশের মুদ্রা ও দৈনিক ভ্রমণ খরচ হিসাব করুন"
+            >
+              <Coins className="w-3.5 h-3.5 text-amber-400" />
+              <span>বাজেট</span>
+            </button>
+          )}
+
+          {onOpenAirportGuide && (
+            <button
+              onClick={() => {
+                // Determine hub IATA
+                const destIata = flight.estimatedDestination?.city?.toUpperCase() || '';
+                let targetIata = 'DAC';
+                if (destIata.includes('BANGKOK') || destCode === 'TH') targetIata = 'BKK';
+                else if (destIata.includes('KUALA') || destCode === 'MY') targetIata = 'KUL';
+                else if (destIata.includes('SINGAPORE') || destCode === 'SG') targetIata = 'SIN';
+                else if (destIata.includes('DUBAI') || destCode === 'AE') targetIata = 'DXB';
+                onOpenAirportGuide(targetIata);
+              }}
+              className="w-full sm:w-auto py-2 px-2.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 rounded-xl border border-indigo-500/30 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+              title="বিমানবন্দরের টার্মিনাল, গেট ও লাউঞ্জ গাইড দেখুন"
+            >
+              <Building2 className="w-3.5 h-3.5 text-indigo-400" />
+              <span>এয়ারপোর্ট হাব</span>
+            </button>
+          )}
 
           {onShare && (
             <button
@@ -247,7 +372,7 @@ export const FlightDetailCard: React.FC<FlightDetailCardProps> = ({
             className="w-full sm:w-auto py-2 px-3.5 bg-indigo-600 hover:bg-indigo-500 text-xs text-white rounded-xl font-medium flex items-center justify-center gap-1.5 transition-all shadow-md shadow-indigo-600/20 disabled:opacity-50"
           >
             <CloudUpload className="w-3.5 h-3.5" />
-            {isSavingToDrive ? <span>ড্রাইভে সেভ হচ্ছে...</span> : <span>Google Drive-এ সংরক্ষণ</span>}
+            {isSavingToDrive ? <span>ড্রাইভে সেভ হচ্ছে...</span> : <span>Google Drive</span>}
           </button>
         </div>
 

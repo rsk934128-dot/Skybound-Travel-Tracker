@@ -140,7 +140,36 @@ export const MapLegend: React.FC<MapLegendProps> = ({ radarRadiusKm = 400, class
               </div>
             </div>
 
-            {/* 3. Radius and Action Hint */}
+            {/* 3. Weather & Wind Dynamics */}
+            <div>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-sky-300 block mb-1.5">
+                আবহাওয়া ও বায়ুপ্রবাহ লেয়ার (Weather & Wind)
+              </span>
+              <div className="space-y-1.5 text-[10px]">
+                <div className="p-2 rounded-xl bg-slate-950/60 border border-slate-800/70 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-sky-400 shadow-sm shadow-sky-400/50" />
+                    <span className="text-slate-300 font-medium">আকাশী লাইন (Wind Flow): বায়ুপ্রবাহ ও গতিবেগ</span>
+                  </div>
+                </div>
+                <div className="p-2 rounded-xl bg-slate-950/60 border border-slate-800/70 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-sm shadow-amber-400/50" />
+                    <span className="text-slate-300 font-medium">ডপলার বৃষ্টি সেল: হাল্কা (সবুজ) থেকে ভারী ঝড় (লাল)</span>
+                  </div>
+                </div>
+                <div className="p-1.5 rounded-xl bg-slate-950/40 border border-slate-800/60 flex items-center gap-2 font-mono text-[9px]">
+                  <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold">
+                    +TW টেলউইন্ড
+                  </span>
+                  <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-bold">
+                    -HW হেডউইন্ড
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* 4. Radius and Action Hint */}
             <div className="pt-1.5 border-t border-slate-800/80 text-[10px] text-slate-400 flex items-center justify-between">
               <span className="truncate">রাডার পরিধি: {radarRadiusKm} কিমি</span>
               <span className="text-indigo-300 shrink-0 font-medium">বিমানে ট্যাপ করুন ✈️</span>

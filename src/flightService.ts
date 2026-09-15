@@ -243,3 +243,175 @@ export async function fetchLiveOverheadFlights(
     message: 'OpenSky Network API রেট-লিমিট বা নেটওয়ার্ক সীমাবদ্ধতার কারণে লাইভ রাডার সিমুলেশন ফিড সচল করা হয়েছে।'
   };
 }
+
+/**
+ * Result model for wind-adjusted arrival time analytics
+ */
+export interface WindAdjustedETAResult {
+  nominalRemainingMinutes: number;
+  windAdjustedRemainingMinutes: number;
+  nominalETA: Date;
+  windAdjustedETA: Date;
+  deltaMinutes: number; // e.g. -3 (tailwind saves 3m) or +4 (headwind delays 4m)
+  headwindKnots: number;
+  tailwindKnots: number;
+  crosswindKnots: number;
+  relativeAngleDeg: number;
+  effectType: 'tailwind' | 'headwind' | 'crosswind' | 'calm';
+  windSpeedKnots: number;
+  windDirectionDeg: number;
+  windDirectionCardinal: string;
+  badgeLabel: string;
+  badgeClass: string;
+  summarySentenceBn: string;
+  detailedPhysicsBn: string;
+  effectiveGroundSpeedKmh: number;
+  stillAirSpeedKmh: number;
+}
+
+/**
+ * Calculates aerodynamic wind impact (Headwind vs Tailwind) on flight arrival time (Wind-Adjusted ETA).
+ * Applies vector decomposition (V_hw = V_w * cos(theta), V_xw = V_w * sin(theta))
+ * to adjust true airspeed and calculate real time saved or lost.
+ */
+export function calculateWindAdjustedETA(
+  flight: FlightState,
+  weather?: {
+    windSpeedKnots: number;
+    windDirectionDeg: number;
+    windDirectionCardinal?: string;
+  } | null,
+  nominalRemainingMinutes?: number,
+  remainingDistanceKm?: number
+): WindAdjustedETAResult {
+  const now = new Date();
+  const altMeters = flight.baroAltitude ?? 0;
+  const isParked = flight.onGround || altMeters <= 60;
+
+  const windSpeedKnots = weather?.windSpeedKnots ?? 15;
+  const windDirectionDeg = weather?.windDirectionDeg ?? 190;
+  const windDirectionCardinal = weather?.windDirectionCardinal ?? 'S';
+
+  const defaultNominalMins = nominalRemainingMinutes ?? (isParked ? 150 : 35);
+  const distKm = remainingDistanceKm ?? Math.max(Math.round((altMeters / 1000) * 22), 45);
+
+  if (isParked) {
+    const nominalETA = new Date(now.getTime() + defaultNominalMins * 60000);
+    return {
+      nominalRemainingMinutes: defaultNominalMins,
+      windAdjustedRemainingMinutes: defaultNominalMins,
+      nominalETA,
+      windAdjustedETA: nominalETA,
+      deltaMinutes: 0,
+      headwindKnots: 0,
+      tailwindKnots: 0,
+      crosswindKnots: 0,
+      relativeAngleDeg: 0,
+      effectType: 'calm',
+      windSpeedKnots,
+      windDirectionDeg,
+      windDirectionCardinal,
+      badgeLabel: 'মাটিতে অবস্থানরত (Parked)',
+      badgeClass: 'bg-slate-800 text-slate-400 border-slate-700',
+      summarySentenceBn: 'বিমানটি বর্তমানে রানওয়ে বা টার্মিনালে অবস্থান করছে, ক্রুজ বায়ুপ্রবাহ কার্যকর নয়।',
+      detailedPhysicsBn: 'গ্রাউন্ড অপারেশনে টার্মিনাল উইন্ড ভেক্টর কার্যকর থাকে না।',
+      effectiveGroundSpeedKmh: 0,
+      stillAirSpeedKmh: 0,
+    };
+  }
+
+  // 1. Heading and Wind Vector Trigonometry
+  const track = flight.trueTrack ?? 0;
+  let relAngle = Math.abs(windDirectionDeg - track) % 360;
+  if (relAngle > 180) relAngle = 360 - relAngle;
+
+  const rad = ((windDirectionDeg - track) * Math.PI) / 180;
+  // Headwind = wind blowing towards face of aircraft (positive = headwind, negative = tailwind)
+  const headwindKnots = Math.round(windSpeedKnots * Math.cos(rad));
+  const tailwindKnots = -headwindKnots;
+  const crosswindKnots = Math.round(Math.abs(windSpeedKnots * Math.sin(rad)));
+
+  // 2. Airspeeds in km/h (1 knot = 1.852 km/h)
+  const measuredGroundSpeedKmh = Math.round((flight.velocity ?? 220) * 3.6);
+  const headwindKmh = headwindKnots * 1.852;
+  
+  // Nominal True Airspeed (TAS) = GroundSpeed + Headwind
+  const stillAirSpeedKmh = Math.max(Math.round(measuredGroundSpeedKmh + headwindKmh), 220);
+
+  // 3. Time differential computation (deltaMinutes)
+  // Distance / Speed calculations:
+  // t_nominal = (D / TAS) * 60
+  // t_wind = (D / (TAS - Headwind)) * 60
+  const adjustedGroundSpeedKmh = Math.max(stillAirSpeedKmh - headwindKmh, 160);
+  const nominalFlightHours = distKm / stillAirSpeedKmh;
+  const windFlightHours = distKm / adjustedGroundSpeedKmh;
+  
+  let computedDeltaMins = Math.round((windFlightHours - nominalFlightHours) * 60);
+
+  // Add crosswind crab drift drag penalty if crosswind is stiff (> 14 kt)
+  if (crosswindKnots >= 14 && stillAirSpeedKmh > 300) {
+    const crabDragFactor = 0.5; // ~0.5 - 1 min steering correction
+    computedDeltaMins += Math.round(crabDragFactor);
+  }
+
+  // Determine effect classification
+  let effectType: 'tailwind' | 'headwind' | 'crosswind' | 'calm' = 'calm';
+  let badgeLabel = 'বাতাস শান্ত (Calm)';
+  let badgeClass = 'bg-slate-800 text-slate-300 border-slate-700';
+  let summarySentenceBn = 'গতিপথে বাতাসের প্রভাব নগণ্য, স্বাভাবিক অবতরণ সময় অপরিবর্তিত রয়েছে।';
+
+  if (tailwindKnots >= 6) {
+    effectType = 'tailwind';
+    // Ensure deltaMinutes is negative (time saved)
+    computedDeltaMins = computedDeltaMins <= 0 ? computedDeltaMins : -Math.max(Math.abs(computedDeltaMins), 1);
+    // Cap reasonable delta for radar zone
+    computedDeltaMins = Math.max(computedDeltaMins, -15);
+    badgeLabel = `💨 +${tailwindKnots}kt টেলউইন্ড (${Math.abs(computedDeltaMins)}মি. আগে)`;
+    badgeClass = 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40';
+    summarySentenceBn = `অনুকূল টেলউইন্ডের কারণে বিমানের গতি বেড়েছে এবং অবতরণ সময় প্রায় ${Math.abs(computedDeltaMins)} মিনিট এগিয়েছে।`;
+  } else if (headwindKnots >= 6) {
+    effectType = 'headwind';
+    // Ensure deltaMinutes is positive (delay)
+    computedDeltaMins = computedDeltaMins >= 0 ? computedDeltaMins : Math.max(Math.abs(computedDeltaMins), 1);
+    computedDeltaMins = Math.min(computedDeltaMins, 20);
+    badgeLabel = `⚠️ -${headwindKnots}kt হেডউইন্ড (+${computedDeltaMins}মি. বিলম্ব)`;
+    badgeClass = 'bg-amber-500/20 text-amber-300 border-amber-500/40';
+    summarySentenceBn = `বিপরীতমুখী হেডউইন্ডের কারণে বিমানের গ্রাউন্ড স্পিড কিছুটা হ্রাস পেয়েছে, ফলে অবতরণ প্রায় ${computedDeltaMins} মিনিট পিছিয়ে গেছে।`;
+  } else if (crosswindKnots >= 8) {
+    effectType = 'crosswind';
+    computedDeltaMins = Math.max(computedDeltaMins, 0);
+    badgeLabel = `↔️ ${crosswindKnots}kt ক্রসউইন্ড`;
+    badgeClass = 'bg-sky-500/20 text-sky-300 border-sky-500/40';
+    summarySentenceBn = `পার্শ্বীয় ক্রসউইন্ডের কারণে অটোপাইলট ড্রাফ্ট কারেকশন কার্যকর রয়েছে (অবতরণে প্রভাব নগণ্য: +${computedDeltaMins} মি.)।`;
+  } else {
+    computedDeltaMins = 0;
+  }
+
+  const windAdjustedMins = Math.max(defaultNominalMins + computedDeltaMins, 3);
+  const nominalETA = new Date(now.getTime() + defaultNominalMins * 60000);
+  const windAdjustedETA = new Date(now.getTime() + windAdjustedMins * 60000);
+
+  const detailedPhysicsBn = `ভেক্টর হিসাব: বাতাসের দিক ${windDirectionDeg}° (${windDirectionCardinal}) ও গতি ${windSpeedKnots} নট। বিমানের হেডিং ${Math.round(track)}° সাপেক্ষে কোণ ${Math.round(relAngle)}°। হেডউইন্ড: ${headwindKnots >= 0 ? `+${headwindKnots}` : headwindKnots} kt ($V_w \\cos\\theta$), ক্রসউইন্ড: ${crosswindKnots} kt ($V_w \\sin\\theta$)।`;
+
+  return {
+    nominalRemainingMinutes: defaultNominalMins,
+    windAdjustedRemainingMinutes: windAdjustedMins,
+    nominalETA,
+    windAdjustedETA,
+    deltaMinutes: computedDeltaMins,
+    headwindKnots,
+    tailwindKnots,
+    crosswindKnots,
+    relativeAngleDeg: Math.round(relAngle),
+    effectType,
+    windSpeedKnots,
+    windDirectionDeg,
+    windDirectionCardinal,
+    badgeLabel,
+    badgeClass,
+    summarySentenceBn,
+    detailedPhysicsBn,
+    effectiveGroundSpeedKmh: adjustedGroundSpeedKmh,
+    stillAirSpeedKmh,
+  };
+}

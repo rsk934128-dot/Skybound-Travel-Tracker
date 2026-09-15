@@ -5,10 +5,15 @@
 
 import { FlightState, UserLocation } from './types';
 
+export type NotificationAlertMode = 'all_flights' | 'watchlist_only';
+
 export interface NotificationSettings {
   enabled: boolean;
   minAltitudeFt: number; // e.g. 30000 ft (9,144 meters)
   soundEnabled: boolean;
+  alertMode: NotificationAlertMode; // 'all_flights' | 'watchlist_only'
+  watchlistIcaos: string[]; // specifically monitored individual flights
+  mutedIcaos: string[]; // specifically muted individual flights
 }
 
 const STORAGE_KEY = 'skybound_high_altitude_alert_settings';
@@ -17,6 +22,9 @@ export const DEFAULT_ALERT_SETTINGS: NotificationSettings = {
   enabled: true,
   minAltitudeFt: 30000, // 30,000 feet (~9,144 meters) standard cruising FL300
   soundEnabled: true,
+  alertMode: 'all_flights',
+  watchlistIcaos: [],
+  mutedIcaos: [],
 };
 
 /**
@@ -26,7 +34,14 @@ export function loadNotificationSettings(): NotificationSettings {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
-      return { ...DEFAULT_ALERT_SETTINGS, ...JSON.parse(saved) };
+      const parsed = JSON.parse(saved);
+      return {
+        ...DEFAULT_ALERT_SETTINGS,
+        ...parsed,
+        alertMode: parsed.alertMode === 'watchlist_only' ? 'watchlist_only' : 'all_flights',
+        watchlistIcaos: Array.isArray(parsed.watchlistIcaos) ? parsed.watchlistIcaos : [],
+        mutedIcaos: Array.isArray(parsed.mutedIcaos) ? parsed.mutedIcaos : [],
+      };
     }
   } catch (err) {
     console.warn('Could not read notification settings from storage:', err);
@@ -43,6 +58,95 @@ export function saveNotificationSettings(settings: NotificationSettings): void {
   } catch (err) {
     console.warn('Could not save notification settings to storage:', err);
   }
+}
+
+/**
+ * Determines whether a specific aircraft should trigger a notification
+ * taking into account master toggle, individual flight watchlist, muted list,
+ * altitude thresholds, and alert mode.
+ */
+export function shouldNotifyFlight(
+  flight: FlightState,
+  settings: NotificationSettings
+): boolean {
+  if (!settings.enabled) return false;
+
+  const icao = (flight.icao24 || '').toLowerCase();
+
+  // 1. Check if specifically muted by user
+  const isMuted = (settings.mutedIcaos || []).some((m) => m.toLowerCase() === icao);
+  if (isMuted) return false;
+
+  // 2. Check if explicitly in the watchlist
+  const isWatchlisted = (settings.watchlistIcaos || []).some((w) => w.toLowerCase() === icao);
+
+  // If in watchlist_only mode, only notify if the flight is in watchlist
+  if (settings.alertMode === 'watchlist_only') {
+    return isWatchlisted;
+  }
+
+  // In all_flights mode:
+  // If explicitly watchlisted, notify regardless of altitude
+  if (isWatchlisted) return true;
+
+  // Otherwise, check altitude threshold
+  const altitudeMeters = flight.baroAltitude || flight.geoAltitude || 0;
+  const altitudeFt = Math.round(altitudeMeters * 3.28084);
+  return altitudeFt >= settings.minAltitudeFt;
+}
+
+/**
+ * Toggle watchlist status for an individual flight
+ */
+export function toggleWatchlistFlight(
+  settings: NotificationSettings,
+  icao24: string
+): NotificationSettings {
+  const normIcao = icao24.toLowerCase();
+  const currentList = settings.watchlistIcaos || [];
+  const exists = currentList.some((id) => id.toLowerCase() === normIcao);
+
+  const newWatchlist = exists
+    ? currentList.filter((id) => id.toLowerCase() !== normIcao)
+    : [...currentList, icao24];
+
+  // If adding to watchlist, remove from muted list if present
+  const newMuted = (settings.mutedIcaos || []).filter((id) => id.toLowerCase() !== normIcao);
+
+  const updated: NotificationSettings = {
+    ...settings,
+    watchlistIcaos: newWatchlist,
+    mutedIcaos: newMuted,
+  };
+  saveNotificationSettings(updated);
+  return updated;
+}
+
+/**
+ * Toggle mute status for an individual flight
+ */
+export function toggleMuteFlight(
+  settings: NotificationSettings,
+  icao24: string
+): NotificationSettings {
+  const normIcao = icao24.toLowerCase();
+  const currentMuted = settings.mutedIcaos || [];
+  const exists = currentMuted.some((id) => id.toLowerCase() === normIcao);
+
+  const newMuted = exists
+    ? currentMuted.filter((id) => id.toLowerCase() !== normIcao)
+    : [...currentMuted, icao24];
+
+  // If muting, remove from watchlist if present
+  const newWatchlist = (settings.watchlistIcaos || []).filter((id) => id.toLowerCase() !== normIcao);
+
+  const updated: NotificationSettings = {
+    ...settings,
+    mutedIcaos: newMuted,
+    watchlistIcaos: newWatchlist,
+  };
+  saveNotificationSettings(updated);
+  return updated;
 }
 
 /**

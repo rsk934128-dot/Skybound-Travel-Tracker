@@ -12,15 +12,121 @@ import { fetchLiveOverheadFlights } from './flightService';
 import { FlightState, DestinationVisaInfo, UserLocation } from './types';
 import { initAuth, googleSignIn, logoutGoogle } from './auth';
 import { User } from 'firebase/auth';
+import {
+  loadNotificationSettings,
+  saveNotificationSettings,
+  toggleWatchlistFlight,
+  toggleMuteFlight,
+  NotificationSettings,
+  isNotificationSupported,
+  getNotificationPermission,
+  requestNotificationPermission,
+} from './notificationService';
+import { NotificationPermissionModal } from './components/NotificationPermissionModal';
+import { TravelExpenseCalculator } from './components/TravelExpenseCalculator';
+import { AirportHubGuide } from './components/AirportHubGuide';
+import { WeatherConditions, getDhakaTerminalWeatherFallback } from './weatherService';
 import { 
   Radar, Globe2, HardDrive, Plane, Search, MapPin, 
   HelpCircle, Sparkles, AlertTriangle, ShieldCheck,
-  Download, Smartphone, Share2, CheckCircle2
+  Download, Smartphone, Share2, CheckCircle2, Coins, Building2
 } from 'lucide-react';
 
 export default function App() {
-  // Navigation tabs: 'radar' | 'visa' | 'drive'
-  const [activeTab, setActiveTab] = useState<'radar' | 'visa' | 'drive'>('radar');
+  // Navigation tabs: 'radar' | 'visa' | 'expenses' | 'airport' | 'drive'
+  const [activeTab, setActiveTab] = useState<'radar' | 'visa' | 'expenses' | 'airport' | 'drive'>('radar');
+  const [selectedExpenseCountryCode, setSelectedExpenseCountryCode] = useState<string>('TH');
+  const [selectedAirportIata, setSelectedAirportIata] = useState<string>('DAC');
+  const [weatherData, setWeatherData] = useState<WeatherConditions | null>(() => getDhakaTerminalWeatherFallback());
+
+  // Flight notification & alert settings
+  const [alertSettings, setAlertSettings] = useState<NotificationSettings>(loadNotificationSettings);
+
+  // Browser Notification Permission state & prompt modal
+  const [browserNotifPermission, setBrowserNotifPermission] = useState<NotificationPermission | 'unsupported'>('default');
+  const [isPermissionModalOpen, setIsPermissionModalOpen] = useState(false);
+  const [permissionModalMode, setPermissionModalMode] = useState<'prompt' | 'denied'>('prompt');
+
+  // Check and prompt permission whenever alert features are toggled
+  const promptOrCheckPermission = async () => {
+    if (!isNotificationSupported()) return;
+    const currentPerm = getNotificationPermission();
+    setBrowserNotifPermission(currentPerm);
+
+    if (currentPerm === 'default') {
+      try {
+        const res = await requestNotificationPermission();
+        setBrowserNotifPermission(res);
+        if (res === 'denied') {
+          setPermissionModalMode('denied');
+          setIsPermissionModalOpen(true);
+        } else if (res === 'granted') {
+          showNotice('success', '🔔 ব্রাউজার নোটিফিকেশন সফলভাবে চালু করা হয়েছে!');
+        }
+      } catch {
+        setPermissionModalMode('prompt');
+        setIsPermissionModalOpen(true);
+      }
+    } else if (currentPerm === 'denied') {
+      setPermissionModalMode('denied');
+      setIsPermissionModalOpen(true);
+    }
+  };
+
+  const handleUpdateAlertSettings = async (newSettings: NotificationSettings) => {
+    const wasDisabled = !alertSettings.enabled;
+    setAlertSettings(newSettings);
+    saveNotificationSettings(newSettings);
+
+    // If enabling alert features, prompt for browser permission
+    if (newSettings.enabled && wasDisabled) {
+      promptOrCheckPermission();
+    }
+  };
+
+  const handleToggleWatchlist = (icao24: string) => {
+    const isAdding = !(alertSettings.watchlistIcaos || []).some(
+      (id) => id.toLowerCase() === icao24.toLowerCase()
+    );
+    const updated = toggleWatchlistFlight(alertSettings, icao24);
+    setAlertSettings(updated);
+
+    if (isAdding) {
+      promptOrCheckPermission();
+    }
+  };
+
+  const handleToggleMute = (icao24: string) => {
+    const updated = toggleMuteFlight(alertSettings, icao24);
+    setAlertSettings(updated);
+  };
+
+  const handleModalRequestPermission = async () => {
+    try {
+      const res = await requestNotificationPermission();
+      setBrowserNotifPermission(res);
+      if (res === 'granted') {
+        setIsPermissionModalOpen(false);
+        showNotice('success', '🔔 ব্রাউজার নোটিফিকেশন সফলভাবে অনুমোদিত হয়েছে!');
+      } else if (res === 'denied') {
+        setPermissionModalMode('denied');
+      } else {
+        setIsPermissionModalOpen(false);
+      }
+    } catch (err) {
+      console.warn('Permission request error:', err);
+      setIsPermissionModalOpen(false);
+    }
+  };
+
+  const handleClosePermissionModal = () => {
+    if (permissionModalMode === 'prompt') {
+      sessionStorage.setItem('skybound_notif_prompt_dismissed', 'true');
+    } else {
+      sessionStorage.setItem('skybound_notif_denied_dismissed', 'true');
+    }
+    setIsPermissionModalOpen(false);
+  };
 
   // PWA Install & Modal state
   const { canInstall, isInstalled, isIOS, triggerInstall } = usePWAInstall();
@@ -102,6 +208,34 @@ export default function App() {
       );
     } else {
       loadOverheadFlights(23.8430, 90.3980, radarRadiusKm);
+    }
+
+    // 3. Notification permission check on app initialization:
+    // If any alert features are enabled, prompt user if permission is 'default',
+    // or provide friendly explanation if permission is 'denied'.
+    if (isNotificationSupported()) {
+      const currentPerm = getNotificationPermission();
+      setBrowserNotifPermission(currentPerm);
+
+      const hasAlertFeatures =
+        alertSettings.enabled ||
+        (alertSettings.watchlistIcaos && alertSettings.watchlistIcaos.length > 0);
+
+      if (hasAlertFeatures) {
+        if (currentPerm === 'default') {
+          const dismissed = sessionStorage.getItem('skybound_notif_prompt_dismissed');
+          if (!dismissed) {
+            setPermissionModalMode('prompt');
+            setIsPermissionModalOpen(true);
+          }
+        } else if (currentPerm === 'denied') {
+          const dismissed = sessionStorage.getItem('skybound_notif_denied_dismissed');
+          if (!dismissed) {
+            setPermissionModalMode('denied');
+            setIsPermissionModalOpen(true);
+          }
+        }
+      }
     }
 
     return () => unsubscribe();
@@ -290,6 +424,32 @@ export default function App() {
             </button>
 
             <button
+              id="nav-tab-expenses"
+              onClick={() => setActiveTab('expenses')}
+              className={`px-3 py-1.5 rounded-xl font-medium flex items-center gap-1.5 transition-all ${
+                activeTab === 'expenses'
+                  ? 'bg-gradient-to-r from-amber-600 to-amber-500 text-slate-950 font-bold shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Coins className="w-4 h-4" />
+              <span className="hidden sm:inline">বাজেট ও মুদ্রা</span>
+            </button>
+
+            <button
+              id="nav-tab-airport"
+              onClick={() => setActiveTab('airport')}
+              className={`px-3 py-1.5 rounded-xl font-medium flex items-center gap-1.5 transition-all ${
+                activeTab === 'airport'
+                  ? 'bg-indigo-600 text-white shadow-sm font-bold'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Building2 className="w-4 h-4" />
+              <span className="hidden sm:inline">এয়ারপোর্ট হাব</span>
+            </button>
+
+            <button
               id="nav-tab-drive"
               onClick={() => setActiveTab('drive')}
               className={`px-3 py-1.5 rounded-xl font-medium flex items-center gap-1.5 transition-all ${
@@ -345,6 +505,15 @@ export default function App() {
               isLiveOpenSky={isLiveOpenSky}
               radarRadiusKm={radarRadiusKm}
               onChangeRadius={handleRadiusChange}
+              alertSettings={alertSettings}
+              onUpdateAlertSettings={handleUpdateAlertSettings}
+              browserNotifPermission={browserNotifPermission}
+              onCheckAndPromptPermission={promptOrCheckPermission}
+              onShowDeniedExplanation={() => {
+                setPermissionModalMode('denied');
+                setIsPermissionModalOpen(true);
+              }}
+              onWeatherLoaded={(wx) => setWeatherData(wx)}
             />
 
             {/* Bottom Slide-up Flight Detail Card */}
@@ -353,13 +522,30 @@ export default function App() {
                 <div className="pointer-events-auto w-full max-w-xl">
                   <FlightDetailCard
                     flight={selectedFlight}
+                    weatherData={weatherData}
                     onClose={() => setSelectedFlight(null)}
                     onOpenFullVisaGuide={(visa) => {
                       setActiveTab('visa');
                     }}
+                    onOpenExpenseCalculator={(code) => {
+                      setSelectedExpenseCountryCode(code);
+                      setActiveTab('expenses');
+                    }}
+                    onOpenAirportGuide={(iata) => {
+                      setSelectedAirportIata(iata);
+                      setActiveTab('airport');
+                    }}
                     driveToken={driveAccessToken}
                     onNeedGoogleSignIn={() => setIsGoogleAuthModalOpen(true)}
                     onShare={() => setIsShareModalOpen(true)}
+                    isMonitored={(alertSettings.watchlistIcaos || []).some(
+                      (id) => id.toLowerCase() === selectedFlight.icao24.toLowerCase()
+                    )}
+                    isMuted={(alertSettings.mutedIcaos || []).some(
+                      (id) => id.toLowerCase() === selectedFlight.icao24.toLowerCase()
+                    )}
+                    onToggleMonitor={handleToggleWatchlist}
+                    onToggleMute={handleToggleMute}
                   />
                 </div>
               </div>
@@ -382,6 +568,32 @@ export default function App() {
             driveToken={driveAccessToken}
             onNeedGoogleSignIn={() => setIsGoogleAuthModalOpen(true)}
             onShareCountry={(visa) => setIsShareModalOpen(true)}
+            onOpenExpenseCalculator={(code) => {
+              setSelectedExpenseCountryCode(code);
+              setActiveTab('expenses');
+            }}
+          />
+        )}
+
+        {activeTab === 'expenses' && (
+          <TravelExpenseCalculator
+            initialCountryCode={selectedExpenseCountryCode}
+            driveToken={driveAccessToken}
+            onNeedGoogleSignIn={() => setIsGoogleAuthModalOpen(true)}
+            onNavigateToVisa={(code) => {
+              setActiveTab('visa');
+            }}
+          />
+        )}
+
+        {activeTab === 'airport' && (
+          <AirportHubGuide
+            initialAirportIata={selectedAirportIata}
+            driveToken={driveAccessToken}
+            onNeedGoogleSignIn={() => setIsGoogleAuthModalOpen(true)}
+            onNavigateToFlights={(iata) => {
+              setActiveTab('radar');
+            }}
           />
         )}
 
@@ -396,7 +608,7 @@ export default function App() {
       </main>
 
       {/* Mobile Bottom Quick Bar if card is not open */}
-      <div className="sm:hidden flex items-center justify-around py-2 px-3 bg-slate-900 border-t border-slate-800 text-xs text-slate-400">
+      <div className="sm:hidden flex items-center justify-around py-2 px-1 bg-slate-900 border-t border-slate-800 text-[11px] text-slate-400">
         <button
           onClick={() => setActiveTab('radar')}
           className={`flex flex-col items-center gap-1 ${activeTab === 'radar' ? 'text-indigo-400 font-bold' : ''}`}
@@ -409,14 +621,28 @@ export default function App() {
           className={`flex flex-col items-center gap-1 ${activeTab === 'visa' ? 'text-indigo-400 font-bold' : ''}`}
         >
           <Globe2 className="w-4 h-4" />
-          <span>ভিসা গাইড</span>
+          <span>ভিসা</span>
+        </button>
+        <button
+          onClick={() => setActiveTab('expenses')}
+          className={`flex flex-col items-center gap-1 ${activeTab === 'expenses' ? 'text-amber-400 font-bold' : ''}`}
+        >
+          <Coins className="w-4 h-4" />
+          <span>বাজেট</span>
+        </button>
+        <button
+          onClick={() => setActiveTab('airport')}
+          className={`flex flex-col items-center gap-1 ${activeTab === 'airport' ? 'text-indigo-400 font-bold' : ''}`}
+        >
+          <Building2 className="w-4 h-4" />
+          <span>এয়ারপোর্ট</span>
         </button>
         <button
           onClick={() => setActiveTab('drive')}
           className={`flex flex-col items-center gap-1 ${activeTab === 'drive' ? 'text-indigo-400 font-bold' : ''}`}
         >
           <HardDrive className="w-4 h-4" />
-          <span>Google Drive</span>
+          <span>ড্রাইভ</span>
         </button>
         <button
           id="btn-mobile-share-app"
@@ -458,6 +684,14 @@ export default function App() {
         isOpen={isGoogleAuthModalOpen}
         onClose={() => setIsGoogleAuthModalOpen(false)}
         onSuccess={handleAuthSuccess}
+      />
+
+      {/* Browser Notification Permission & Friendly Denied Explanation Modal */}
+      <NotificationPermissionModal
+        isOpen={isPermissionModalOpen}
+        mode={permissionModalMode}
+        onClose={handleClosePermissionModal}
+        onRequestPermission={handleModalRequestPermission}
       />
     </div>
   );

@@ -1,14 +1,19 @@
 import React, { useState } from 'react';
 import { BANGLADESH_PASSPORT_VISA_DB, VISA_CATEGORIES_CONFIG } from '../visaData';
 import { DestinationVisaInfo, VisaCategory } from '../types';
-import { Search, Filter, ShieldCheck, FileText, ExternalLink, CloudUpload, CheckCircle2, Share2 } from 'lucide-react';
+import { 
+  Search, Filter, ShieldCheck, FileText, ExternalLink, 
+  CloudUpload, CheckCircle2, Share2, Coins, Calculator, ArrowRight
+} from 'lucide-react';
 import { saveVisaChecklistToDrive } from '../driveService';
+import { getCountryCurrencyMeta } from '../currencyService';
 
 interface VisaExplorerProps {
   onSelectCountry?: (visa: DestinationVisaInfo) => void;
   driveToken: string | null;
   onNeedGoogleSignIn: () => void;
   onShareCountry?: (visa: DestinationVisaInfo) => void;
+  onOpenExpenseCalculator?: (countryCode: string) => void;
 }
 
 export const VisaExplorer: React.FC<VisaExplorerProps> = ({
@@ -16,6 +21,7 @@ export const VisaExplorer: React.FC<VisaExplorerProps> = ({
   driveToken,
   onNeedGoogleSignIn,
   onShareCountry,
+  onOpenExpenseCalculator,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState<VisaCategory | 'all'>('all');
@@ -81,6 +87,17 @@ export const VisaExplorer: React.FC<VisaExplorerProps> = ({
               মাথার ওপরের প্লেন বা বিশ্বের যেকোনো দেশের সর্বশেষ ভিসা নীতিমালা, আকর্ষণীয় পর্যটন ল্যান্ডমার্ক এবং সরাসরি গুগল ড্রাইভ সেভ সুবিধা।
             </p>
           </div>
+
+          {onOpenExpenseCalculator && (
+            <button
+              onClick={() => onOpenExpenseCalculator(expandedCountry || 'TH')}
+              className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-md shadow-amber-900/30 transition-all cursor-pointer"
+            >
+              <Coins className="w-4 h-4" />
+              <span>ভ্রমণ বাজেট ও কারেন্সি কনভার্টার</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
 
         {/* Visual Hero Banner for Visa Explorer */}
@@ -354,6 +371,53 @@ export const VisaExplorer: React.FC<VisaExplorerProps> = ({
                       ))}
                     </div>
                   </div>
+
+                  {/* Currency & Daily Travel Cost Quick Snapshot */}
+                  {(() => {
+                    const cMeta = getCountryCurrencyMeta(country.countryCode);
+                    return (
+                      <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-amber-950/20 p-3.5 rounded-xl border border-amber-500/30">
+                        <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                          <h4 className="text-amber-300 font-semibold flex items-center gap-1.5">
+                            <Coins className="w-4 h-4 text-amber-400" />
+                            মুদ্রা ও দৈনিক ভ্রমণ খরচের ধারণা ({country.countryNameBn})
+                          </h4>
+                          <span className="text-[11px] font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-500/40 px-2 py-0.5 rounded-md">
+                            ১ {cMeta.currencyCode} ≈ {cMeta.defaultRateToBdt} ৳ BDT
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-2 text-center text-xs my-2.5">
+                          <div className="p-2 rounded-lg bg-slate-900/90 border border-slate-800">
+                            <span className="text-[10px] text-slate-400 block">🎒 বাজেট</span>
+                            <span className="font-bold text-white font-mono">~${cMeta.dailyCostBudgetUsd}</span>
+                            <span className="text-[10px] text-slate-400 block mt-0.5">/প্রতিদিন</span>
+                          </div>
+                          <div className="p-2 rounded-lg bg-slate-900/90 border border-slate-800">
+                            <span className="text-[10px] text-indigo-400 block">🏨 স্ট্যান্ডার্ড</span>
+                            <span className="font-bold text-white font-mono">~${cMeta.dailyCostStandardUsd}</span>
+                            <span className="text-[10px] text-slate-400 block mt-0.5">/প্রতিদিন</span>
+                          </div>
+                          <div className="p-2 rounded-lg bg-slate-900/90 border border-slate-800">
+                            <span className="text-[10px] text-amber-400 block">👑 লাক্সারি</span>
+                            <span className="font-bold text-white font-mono">~${cMeta.dailyCostLuxuryUsd}</span>
+                            <span className="text-[10px] text-slate-400 block mt-0.5">/প্রতিদিন</span>
+                          </div>
+                        </div>
+
+                        {onOpenExpenseCalculator && (
+                          <button
+                            onClick={() => onOpenExpenseCalculator(country.countryCode)}
+                            className="w-full mt-1 py-1.5 px-3 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                          >
+                            <Calculator className="w-3.5 h-3.5" />
+                            <span>{country.countryNameBn} ভ্রমণ বাজেট ও কারেন্সি কনভার্টারে হিসাব করুন</span>
+                            <ArrowRight className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {/* Save to Drive Action Footer */}
                   <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
